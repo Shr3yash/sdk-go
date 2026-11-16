@@ -10,11 +10,24 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 )
+
+// keepaliveParams makes a dead or half-open connection fail with Unavailable
+// instead of leaving streams blocked in Recv. Pings are only sent while an RPC
+// is open. The gateway serves gRPC through hyper, which does not rate limit
+// client pings, and pings every 20s with a 10s timeout on its side, so 30s/10s
+// sits in the same range.
+var keepaliveParams = keepalive.ClientParameters{
+	Time:                30 * time.Second,
+	Timeout:             10 * time.Second,
+	PermitWithoutStream: false,
+}
 
 // TLSParams holds TLS settings without importing the v1 package.
 type TLSParams struct {
@@ -36,7 +49,7 @@ func NewConnection(address string, tlsCfg *TLSParams, auth credentials.PerRPCCre
 	} else {
 		address = strings.TrimPrefix(address, "https://")
 	}
-	opts := []grpc.DialOption{}
+	opts := []grpc.DialOption{grpc.WithKeepaliveParams(keepaliveParams)}
 
 	if usePlaintext {
 		if tlsCfg != nil && (tlsCfg.CAFile != "" || tlsCfg.CertFile != "" || tlsCfg.KeyFile != "") {
